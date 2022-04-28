@@ -17,5 +17,5 @@ Vizualizing a volume is done using a tuple of the patient and the given day `(<c
 from org import org
 fileorganizer = org()
 pair = ("case123", "case123_day0")
-fileorganizer.volviz()
+fileorganizer.volviz(pair)
 `````
