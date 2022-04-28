@@ -1,5 +1,5 @@
 # MRI segmentation
-Code used for UW-Maddison MRI segmentation [kaggle challenge](https://www.kaggle.com/competitions/uw-madison-gi-tract-image-segmentation)
+Code used for UW-Maddison MRI segmentation [kaggle challenge](https://www.kaggle.com/competitions/uw-madison-gi-tract-image-segmentation) April 15 - July 8
 
 
 To unzip and organize the images and convert to nifti run the following:
