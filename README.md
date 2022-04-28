@@ -11,4 +11,4 @@ fileorganizer = org()
 fileorganizer.unzip()
 fileorganizer.scans2nifti()
 ````
-Note it will change the slicing axis to the standar way. Before running the code the k'th slice would be accesed as ```img[k,:,:]``` while the standard way is ```img[:,:,k]```. ````scans2nifti```` will convert so the slice axis is the standard scans2nifti.
+Note it will change the slicing axis to the standard format. Before running the code the k'th slice would be accesed as ```img[k,:,:]``` while the standard way is ```img[:,:,k]```. ````scans2nifti```` will convert so the slice axis is the standard scans2nifti.
