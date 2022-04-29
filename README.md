@@ -1,4 +1,6 @@
 # MRI segmentation
+<sub><sup>WIP</sup></sub>
+
 Code used for UW-Maddison MRI segmentation [kaggle challenge](https://www.kaggle.com/competitions/uw-madison-gi-tract-image-segmentation) April 15 - July 8
 
 
