@@ -1,6 +1,5 @@
-import enum
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 
 import nibabel as nib
@@ -14,19 +13,34 @@ from volviz import plotly_volume
 
 class org:
     def __init__(self):
-        self.wd = os.getcwd()#Current working directory
-        self.cores = 12 #Number of cores to use when multiprocessing
-        self.data_dir = "" #Directory where data is stored
-        self.nifiti_dir = "" #Directory where nifti files are stored
-        self.zipname = "" #Name of zip file
-        self.patients = [] #List of patients
-        self.pairs = [] #List of pairs (patient,day)
-        self.segpairs = [] #List of pairs (patient,day) where segmentation nonzero
-        self.maskdf = pd.DataFrame() #Dataframe with mask information
-        self.segval = {} #Dictionary with segmentation class as key and unique int as value
-        ####################
-        ###   Functions  ###
-        ####################
+        self.wd = os.getcwd()
+        """Current working directory"""
+        self.cores = 12 
+        """Number of cores to use when multiprocessing"""
+        self.data_dir = "" 
+        """Directory where data is stored"""
+        self.nifiti_dir = "" 
+        """Directory where nifti files are stored"""
+        self.zipname = "" 
+        """Name of zip file"""
+        self.patients = [] 
+        """List of patients"""
+        self.pairs = [] 
+        """List of pairs (patient,day)"""
+        self.segpairs = [] 
+        """List of pairs (patient,day) where segmentation nonzero"""
+        self.maskdf = pd.DataFrame() 
+        """Dataframe with mask information"""
+        self.segval = {} 
+        """Dictionary with segmentation class as key and unique int as value"""
+        
+        
+        self.startall()
+    
+    def startall(self):
+        """
+        Start all functions
+        """
         print()
         print("Making directories:")
         self.makedir()#Make the data directory
@@ -43,6 +57,8 @@ class org:
         #Mask DataFram
         self.maskdf = self.create_maskdf()
 
+        #Mask volumes
+        self.mask_all_volumes()
     def makedir(self):
         """
         Make data directory if they do not exist
@@ -185,9 +201,144 @@ class org:
             print("To check if conversion was successful run")
             print("self.mass_nifti_check")
 
+    
+    def create_maskdf(self):
+        """
+        Creates a dataframe with columns:
+        patient, day, mask_name, mask_value
+        in addition to already existing columns
+
+        Returns
+        -------
+        self.maskdf : pandas DataFrame
+        """
+        #Load csv file
+        maskdf = pd.read_csv(self.data_dir + '/train.csv')
+        #Add new columns
+        maskdf["patient"] = maskdf["id"].apply(lambda x: x.split("_")[0])
+        maskdf["day"] = maskdf["patient"] + "_" + maskdf["id"].apply(lambda x: x.split("_")[1])
+        maskdf["slice"] = maskdf["id"].apply(lambda x: int(x.split("_")[-1]))
+        #Set maskdf
+        self.maskdf = maskdf
+        self.maskdf = self.maskdf.dropna(subset=["segmentation"])
+        self.maskdf = self.maskdf.reset_index(drop=True)
+
+        #set pairs of patients who have nonzero masks
+        days = self.maskdf["day"].unique()
+        self.segpairs = []
+        for day in days:
+            patient = day.split("_")[0]
+            self.segpairs.append((patient, day))
+        
+        segclasses = self.maskdf["class"].unique()
+        self.segval = {segclass:i+1 for i,segclass in enumerate(segclasses)}
+        return self.maskdf
+    def string2mask(self, string, dim):
+            """
+            Given a segmentation string
+            create the relevant binary mask
+            
+            Parameters
+            ----------
+            string : str
+                String containing segmentation information
+            dim : tuple
+                Dimension of the volume 
+            Returns
+            -------
+            mask : numpy array
+                Binary mask of shape (dim[0], dim[1]), ie 2D image/mask
+            """
+            #Create flattend empty mask
+            mask = np.zeros(dim[0]*dim[1])
+            string_list = string.split(" ")
+            #Locations for mask pixels
+            pixel_loc = string_list[::2]
+            #How long the mask pixels stretch
+            pixel_length = string_list[1::2]
+            for location, length in zip(pixel_loc, pixel_length):
+                #Change value of mask
+                mask[int(location):int(location)+int(length)] = 1
+            #Reshape mask
+            mask = mask.reshape(dim[0], dim[1])
+            return mask
+    def mask_one_volume(self, pair):
+        """
+        Given a pair of (patient, day) create a relevant
+        segmentation mask
+
+        Parameters
+        ----------
+        pair : tuple
+            A pair of (patient, day)
+        
+        Returns
+        -------
+        mask : numpy array
+            A mask of the relevant volume
+        """
+        patient, day = pair
+        #Load relevant nifti file
+        img_nifti = nib.load(self.nifiti_dir + patient + '/' + day + '.nii')
+        #Convert to numpy array
+        img_nifti_arr = img_nifti.get_fdata()
+        #dimension of volume
+        dim = img_nifti_arr.shape
+        #Create empty mask
+        mask = np.zeros(dim)
+
+        #Relevant rows of maskdf
+        maskdf_sub = self.maskdf[(self.maskdf["patient"]==patient) & (self.maskdf["day"]==day)]
+        
+        #Loop through rows and create mask
+        for index, row in maskdf_sub.iterrows():
+            #Get relevant slice
+            slice = row["slice"]
+            seg_string = row["segmentation"]
+            seg_class = row["class"]
+            #Get relevant mask
+            seg_mask = self.string2mask(seg_string, dim)
+            #Add mask to mask
+            mask[:,:,slice] += seg_mask*self.segval[seg_class]
+        
+        #Save directory
+        saveDir = self.nifiti_dir + patient + '/'
+        #Filename to save under
+        fileName = "mask_"+day + '.nii'
+        #Save as nifti
+        nib.save(nib.Nifti1Image(mask, img_nifti.affine), saveDir + fileName)
+        return mask
+    def mask_all_volumes(self):
+        """
+        Create segmentation masks for all volumes
+        and save as nifti file in location
+        data/nifti/patient/mask_day.nii
+        eg: data/nifti/case123/mask_case123_day0.nii
+        """
+        print()
+        #Check if a mask exists
+        test_pair = self.segpairs[0]
+        if not os.path.exists(self.nifiti_dir + test_pair[0] + '/mask_' + test_pair[1] + '.nii'):
+            print("Creating segmentation masks for all volumes")
+            print("Using", self.cores, "cores")
+            with mp.Pool(processes=self.cores) as pool:
+                results = pool.map(self.mask_one_volume, self.segpairs)
+                pool.close()
+            print("Segmentation masking complete")
+            results = None
+        else:
+            print("Masks Already Exists")
+        return None
+###############################################################################
+#                                                                             #
+#                                                                             #
+#                              UTILITY                                        #
+#                                                                             #
+#                                                                             #
+###############################################################################
     def nifti_conversion_check(self, pair):
         """
-        Check if convertion to nifti is done correctly
+        Check if conversion to nifti is done correctly
         return true if
         """
         patient, day = pair
@@ -215,6 +366,16 @@ class org:
         print("Checking complete")
         print("Number of nifti files converted correctly: ", sum(results))
         print("Number of nifti files converted incorrectly: ", len(results)-sum(results))
+
+    def load_nifti_img(self, pair):
+        """
+        Given a (patient, day) pair return numpy array of relevant image
+        """
+        #Load relevant nifti file
+        img_nifti = nib.load(self.nifiti_dir + pair[0] + '/' + pair[1] + '.nii')
+        #Convert to numpy array
+        img_nifti_arr = img_nifti.get_fdata()
+        return img_nifti_arr
 
     def volviz(self, pair):
         """
@@ -246,111 +407,3 @@ class org:
         plt.title("Slice " + str(slice) + " of " + patient + " " + day)
         plt.show()
         return None
-
-    def create_maskdf(self):
-        """
-        Creates a dataframe with columns:
-        patient, day, mask_name, mask_value
-        in addition to already existing columns
-
-        Returns
-        -------
-        self.maskdf : pandas DataFrame
-        """
-        #Load csv file
-        maskdf = pd.read_csv(self.data_dir + '/train.csv')
-        #Add new columns
-        maskdf["patient"] = maskdf["id"].apply(lambda x: x.split("_")[0])
-        maskdf["day"] = maskdf["patient"] + "_" + maskdf["id"].apply(lambda x: x.split("_")[1])
-        maskdf["slice"] = maskdf["id"].apply(lambda x: int(x.split("_")[-1]))
-        #Set maskdf
-        self.maskdf = maskdf
-        self.maskdf = self.maskdf.dropna(subset=["segmentation"])
-        self.maskdf = self.maskdf.reset_index(drop=True)
-
-        #set pairs of patients who have nonzero masks
-        days = self.maskdf["day"].unique()
-        self.segpairs = []
-        for day in days:
-            patient = day.split("_")[0]
-            self.segpairs.append((patient, day))
-        
-        segclasses = self.maskdf["class"].unique()
-        self.segval = {segclass:i for i,segclass in enumerate(segclasses)}
-        return self.maskdf
-
-    def mask_one_volume(self, pair):
-        """
-        Given a pair of (patient, day) create a relevant
-        segmentation mask
-        """
-        patient, day = pair
-        #Load relevant nifti file
-        img_nifti = nib.load(self.nifiti_dir + patient + '/' + day + '.nii')
-        #Convert to numpy array
-        img_nifti_arr = img_nifti.get_fdata()
-        #dimension of volume
-        dim = img_nifti_arr.shape
-        #Create empty mask
-        mask = np.zeros(dim)
-
-        #Relevant rows of maskdf
-        maskdf_sub = self.maskdf[(self.maskdf["patient"]==patient) & (self.maskdf["day"]==day)]
-        
-        #Loop through rows and create mask
-        for index, row in maskdf_sub.iterrows():
-            #Get relevant slice
-            slice = row["slice"]
-            seg_string = row["segmentation"]
-            seg_class = row["class"]
-            print(slice)
-            print(seg_string)
-            print(seg_class)
-            print()
-            print()
-            #Get relevant mask
-        return maskdf_sub
-    def parse_string(self, string, dim):
-        """
-        Given a segmentation string
-        create the relevant binary mask
-        """
-        #Create flattend empty mask
-        mask = np.zeros(dim[0]*dim[1])
-    def parse_segmentation_string(self, string, pair):
-        """
-        Parse the segmentation string in self.maskdf
-        """
-        #Load relevant nifti file
-        img_nifti = nib.load(self.nifiti_dir + pair[0] + '/' + pair[1] + '.nii')
-
-        #Convert to numpy array
-        img_nifti_arr = img_nifti.get_fdata()
-
-        #first slice
-        fslice = img_nifti_arr[:,:,0]
-        img_length = len(fslice.flatten())
-        print(img_length)
-        mask = np.zeros(img_length)
-
-        #Split string
-        string_list = string.split(" ")
-        pixel_loc = string_list[::2]
-        pixel_length = string_list[1::2]
-        print(pixel_loc)
-        print(pixel_length)
-        for location, length in zip(pixel_loc, pixel_length):
-            print(location)
-            print(length)
-            mask[int(location):int(location)+int(length)] = 1
-        return mask.reshape(img_nifti_arr.shape[0], img_nifti_arr.shape[1])
-
-    def load_nifti_img(self, pair):
-        """
-        Given a (patient, day) pair return numpy array of relevant image
-        """
-        #Load relevant nifti file
-        img_nifti = nib.load(self.nifiti_dir + pair[0] + '/' + pair[1] + '.nii')
-        #Convert to numpy array
-        img_nifti_arr = img_nifti.get_fdata()
-        return img_nifti_arr
