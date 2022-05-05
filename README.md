@@ -3,6 +3,13 @@
 
 Code used for UW-Maddison MRI segmentation [kaggle challenge](https://www.kaggle.com/competitions/uw-madison-gi-tract-image-segmentation) April 15 - July 8
 
+The coe below utilitzes multiprocessing, the default number of cores is set to 12. If you want to use  ```N``` number of cores run: 
+``` 
+from org import org
+fileorganizer = org()
+fileorganizer.cores = N
+```
+
 
 To unzip and organize the images and convert to nifti run the following:
 ````
