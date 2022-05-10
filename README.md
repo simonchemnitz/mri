@@ -18,7 +18,7 @@ fileorganizer = org()
 fileorganizer.unzip()
 fileorganizer.scans2nifti()
 ````
-Note it will change the slicing axis to the standard format. Before running the code the k'th slice would be accesed as ```img[k,:,:]``` while the standard way is ```img[:,:,k]```. ````scans2nifti```` will convert so the slice axis is the standard scans2nifti.
+Note it will change the slicing axis to the standard format. Before running the code the k'th slice would be accesed as ```img[k,:,:]``` while the standard way is ```img[:,:,k]```. ````scans2nifti```` will convert so the slice axis is the standard.
 The relevant zip file should be in the same folder as *org.py*
 
 To generate the segmentation mask from the ```train.csv``` file run
